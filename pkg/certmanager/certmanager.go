@@ -71,11 +71,17 @@ func (c *CertManager) EnsureCertificate(vol *csiapi.MetaData, keyBundle *util.Ke
 		return nil, err
 	}
 
-	// Not ok so create a new certificate request
-	if !ok {
-		if err := c.createNewCertificateRequest(vol, keyBundle); err != nil {
+	// if exists, delete it
+	if ok {
+		namespace := vol.Attributes[csiapi.CSIPodNamespaceKey]
+		err = c.cmClient.CertmanagerV1alpha2().CertificateRequests(namespace).Delete(vol.ID, &metav1.DeleteOptions{})
+		if err != nil && !k8sErrors.IsNotFound(err) {
 			return nil, err
 		}
+	}
+
+	if err := c.createNewCertificateRequest(vol, keyBundle); err != nil {
+		return nil, err
 	}
 
 	glog.Infof("cert-manager: waiting for CertificateRequest to become ready %s", vol.ID)
@@ -227,34 +233,10 @@ func (c *CertManager) RenewCertificate(vol *csiapi.MetaData) (*x509.Certificate,
 
 	if b, ok := vol.Attributes[csiapi.ReusePrivateKey]; !ok || b != "true" {
 		keyBundle, err = util.NewRSAKey()
-		if err != nil {
-			return nil, err
-		}
-
 	} else {
-
-		keyBytes, err := ioutil.ReadFile(util.KeyPath(vol))
-
-		if err != nil {
-			return nil, err
-		}
-
-		sk, err := pki.DecodePKCS1PrivateKeyBytes(keyBytes)
-		if err != nil {
-			return nil, err
-		}
-
-		keyBundle = &util.KeyBundle{
-			PEM:                keyBytes,
-			PrivateKey:         sk,
-			SignatureAlgorithm: x509.SHA256WithRSA,
-			PublicKeyAlgorithm: x509.RSA,
-		}
+		keyBundle, err = util.ReadKeyBundleFrom(vol)
 	}
-
-	namespace := vol.Attributes[csiapi.CSIPodNamespaceKey]
-	err = c.cmClient.CertmanagerV1alpha2().CertificateRequests(namespace).Delete(vol.ID, &metav1.DeleteOptions{})
-	if err != nil && !k8sErrors.IsNotFound(err) {
+	if err != nil {
 		return nil, err
 	}
 

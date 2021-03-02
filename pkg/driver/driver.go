@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	Version = "0.1.0-alpha.1"
+	Version = "0.1.1"
 )
 
 type Driver struct {

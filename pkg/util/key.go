@@ -22,6 +22,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"github.com/jetstack/cert-manager/pkg/util/pki"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -34,6 +35,25 @@ type KeyBundle struct {
 	SignatureAlgorithm x509.SignatureAlgorithm
 	PublicKeyAlgorithm x509.PublicKeyAlgorithm
 	PEM                []byte
+}
+
+func ReadKeyBundleFrom(vol *csiapi.MetaData) (*KeyBundle,error) {
+	keyBytes, err := ioutil.ReadFile(KeyPath(vol))
+	if err != nil {
+		return nil, err
+	}
+	sk, err := pki.DecodePKCS1PrivateKeyBytes(keyBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	keyBundle := &KeyBundle{
+		PEM:                keyBytes,
+		PrivateKey:         sk,
+		SignatureAlgorithm: x509.SHA256WithRSA,
+		PublicKeyAlgorithm: x509.RSA,
+	}
+	return keyBundle, nil
 }
 
 func NewRSAKey() (*KeyBundle, error) {

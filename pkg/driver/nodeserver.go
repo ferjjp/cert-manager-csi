@@ -100,8 +100,7 @@ func (ns *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	glog.Infof("node: created volume: %s", vol.Path)
 
 	glog.Infof("node: creating key/cert pair with cert-manager: %s", vol.Path)
-
-	keyBundle, err := util.NewRSAKey()
+	keyBundle, err := determineKey(vol)
 	if err != nil {
 		return nil, err
 	}
@@ -160,6 +159,18 @@ func (ns *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		attr[csiapi.CSIPodNamespaceKey], attr[csiapi.CSIPodNameKey], vol.ID)
 
 	return &csi.NodePublishVolumeResponse{}, nil
+}
+
+func determineKey(vol *csiapi.MetaData) (keyBundle *util.KeyBundle, error error) {
+	if _, err := os.Stat(util.KeyPath(vol)); err == nil {
+		glog.Infof("key path for volume %s was found, reading info..",vol.ID)
+		return util.ReadKeyBundleFrom(vol)
+	} else if os.IsNotExist(err) {
+		glog.Infof("key path for volume %s was not found, making a new one",vol.ID)
+		return util.NewRSAKey()
+	} else {
+		return nil, fmt.Errorf("could not determine key: %s",err.Error())
+	}
 }
 
 func (ns *NodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
